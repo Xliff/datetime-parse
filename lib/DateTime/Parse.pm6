@@ -6,11 +6,17 @@ my class X::DateTime::CannotParse is Exception {
 class DateTime::Parse is DateTime {
     grammar DateTime::Parse::Grammar {
         token TOP {
-            <dt=rfc3339-date> | <dt=rfc1123-date> | <dt=rfc850-date> | <dt=rfc850-var-date> | <dt=rfc850-var-date-two> | <dt=asctime-date>
+            <dt=rfc3339-date>    | <dt=rfc1123-date>        | <dt=rfc850-date>  |
+            <dt=rfc850-var-date> | <dt=rfc850-var-date-two> | <dt=asctime-date> |
+            <dt=curl-dt>
         }
 
         token rfc3339-date {
-            <date=.date5> <[Tt \x0020]> <time=.time2>
+            <date=.date5> [ <[Tt \x0020]> <time=.time2> ]?
+        }
+
+        token date6 {
+          <year=.D4-year> <month=.D2> <day=.D2>
         }
 
         token date5 {
@@ -93,6 +99,11 @@ class DateTime::Parse is DateTime {
             <day=.D2> '-' <month> '-' <year=.D4-year>
         }
 
+        token curl-dt {
+            <month> <.SP> <day=.D2> <.SP> <time> <.SP> <year=.D4-year> <.SP>
+            <gmtUtc>
+        }
+
         token time {
             <hour=.D2> ':' <minute=.D2> ':' <second=.D2>
         }
@@ -135,12 +146,16 @@ class DateTime::Parse is DateTime {
     }
 
     class DateTime::Parse::Actions {
+        has $!timezone is built;
+
         method TOP($/) {
             make $<dt>.made
         }
 
         method rfc3339-date($/) {
-            make DateTime.new(|$<date>.made, |$<time>.made);
+            make
+              $<time> ?? DateTime.new(|$<date>.made, |$<time>.made)
+                      !! DateTime.new(|$<date>.made)
         }
 
         method rfc1123-date($/) {
@@ -165,7 +180,21 @@ class DateTime::Parse is DateTime {
 
             my $tz = ($<asctime-tz>.made<offset-hours> // 0) × 3600;
 
-            make DateTime.new(|$<date>.made, |$<time>.made, :timezone($tz))
+            make DateTime.new(
+              |$<date>.made,
+              |$<time>.made,
+              :timezone($!timezone // $tz)
+            )
+        }
+
+        method curl-dt ($/) {
+          make DateTime.new(
+            month => $<month>.made,
+            day   => $<day>.made,
+            year  => $<year>.made,
+
+            |$<time>.made
+          );
         }
 
         method !genericDate($/) {
@@ -190,6 +219,10 @@ class DateTime::Parse is DateTime {
 
         method date5($/) { # e.g. 1996-12-19
             self!genericDate($/);
+        }
+
+        method date6 ($/) { # e.g. 19961219
+          self!genericDate($/);
         }
 
         my %timezones =
@@ -263,9 +296,16 @@ class DateTime::Parse is DateTime {
         }
     }
 
-    method new(Str $format, :$timezone is copy = 0, :$rule = 'TOP') {
-        DateTime::Parse::Grammar.parse($format, :$rule, :actions(DateTime::Parse::Actions))
-            or X::DateTime::CannotParse.new( invalid-str => $format ).throw;
+    method new(Str $format, :$timezone is copy, :$rule = 'TOP') {
+        DateTime::Parse::Grammar.parse(
+           $format,
+          :$rule,
+          actions   => $timezone ?? DateTime::Parse::Actions.new(:$timezone)
+                                 !! DateTime::Parse::Actions.new
+        )
+            or
+        X::DateTime::CannotParse.new( invalid-str => $format ).throw;
+
         $/.made
     }
 }
@@ -288,7 +328,7 @@ DateTime::Parse - DateTime parser
 
 =item rfc1123
 =item rfc850
-=item asctime 
+=item asctime
 
 =head1 METHODS
 
