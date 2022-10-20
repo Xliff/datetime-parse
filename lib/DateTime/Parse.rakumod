@@ -20,7 +20,7 @@ class DateTime::Parse is DateTime {
         }
 
         token nginx-date {
-            <date=.dateSlashes> ':' <time=.time3>
+            <date=.date6Slashes> ':' <time=.time3>
         }
 
         token time2 {
