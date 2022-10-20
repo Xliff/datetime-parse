@@ -8,7 +8,7 @@ class DateTime::Parse is DateTime {
         token TOP {
             <dt=rfc3339-date>    | <dt=rfc1123-date>        | <dt=rfc850-date>  |
             <dt=rfc850-var-date> | <dt=rfc850-var-date-two> | <dt=asctime-date> |
-            <dt=curl-dt>
+            <dt=nginx-date>      | <dt=curl-dt>
         }
 
         token rfc3339-date {
@@ -19,12 +19,16 @@ class DateTime::Parse is DateTime {
           <year=.D4-year> <month=.D2> <day=.D2>
         }
 
-        token date5 {
-            <year=.D4-year>  '-' <month=.D2> '-' <day=.D2>
+        token nginx-date {
+            <date=.date6> ':' <time=.time3>
         }
 
         token time2 {
             <part=.partial-time> <offset=.time-offset>
+        }
+
+        token time3 {
+            <time=.partial-time> ' ' <time-numoffset>
         }
 
         token partial-time {
@@ -40,7 +44,7 @@ class DateTime::Parse is DateTime {
         }
 
         token time-numoffset {
-            <sign=[+-]> <hour=.D2> ':' <minute=.D2>
+            <sign=[+-]> <hour=.D2> ':'? <minute=.D2>
         }
 
         token time-houroffset {
@@ -51,24 +55,24 @@ class DateTime::Parse is DateTime {
             \d \d?
         }
 
-        token gmtUtc {
-          'GMT' | 'UTC'
+        token gmt-or-numeric-tz {
+          'GMT' | 'UTC' | [ <[-+]>? <[0..9]> ** 4 ]
         }
 
         token rfc1123-date {
-            <.wkday> ',' <.SP> <date=.date1> <.SP> <time> <.SP> <gmtUtc>
+            <.wkday> ',' <.SP> <date=.date1> <.SP> <time> <.SP> <gmt-or-numeric-tz>
         }
 
         token rfc850-date {
-            <.weekday> ',' <.SP> <date=.date2> <.SP> <time> <.SP> <gmtUtc>
+            <.weekday> ',' <.SP> <date=.date2> <.SP> <time> <.SP> <gmt-or-numeric-tz>
         }
 
         token rfc850-var-date {
-            <.wkday> ','? <.SP> <date=.date4> <.SP> <time> <.SP> <gmtUtc>
+            <.wkday> ','? <.SP> <date=.date4> <.SP> <time> <.SP> <gmt-or-numeric-tz>
         }
 
         token rfc850-var-date-two {
-            <.wkday> ','? <.SP> <date=.date2> <.SP> <time> <.SP> <gmtUtc>
+            <.wkday> ','? <.SP> <date=.date2> <.SP> <time> <.SP> <gmt-or-numeric-tz>
         }
 
         token asctime-date {
@@ -97,6 +101,14 @@ class DateTime::Parse is DateTime {
 
         token date4 { # e.g., 02-Jun-1982
             <day=.D2> '-' <month> '-' <year=.D4-year>
+        }
+
+        token date5 {
+            <year=.D4-year>  '-' <month=.D2> '-' <day=.D2>
+        }
+
+        token date6 {
+            <day=.D2> '/' <month> '/' <year=.D4-year>
         }
 
         token curl-dt {
@@ -159,19 +171,30 @@ class DateTime::Parse is DateTime {
         }
 
         method rfc1123-date($/) {
-            make DateTime.new(|$<date>.made, |$<time>.made)
+            make DateTime.new(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
         }
 
         method rfc850-date($/) {
-            make DateTime.new(|$<date>.made, |$<time>.made)
+            make DateTime.new(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
         }
 
         method rfc850-var-date($/) {
-            make DateTime.new(|$<date>.made, |$<time>.made)
+            make DateTime.new(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
+        }
+
+        method gmt-or-numeric-tz($/) {
+            $/.make: %( timezone =>
+                    "$/" eq 'UTC' | 'GMT' | 'Z' ?? 0 !! +$/ * 36
+                );
         }
 
         method rfc850-var-date-two($/) {
-            make DateTime.new(|$<date>.made, |$<time>.made)
+            make DateTime.ne  token date5 {
+            <year=.D4-year>  '-' <month=.D2> '-' <day=.D2>
+        }
+
+        token date6 {
+            <day=.D2> '/' <month> '/' <year=.D4-year>w(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
         }
 
         method asctime-date($/) {
@@ -195,6 +218,10 @@ class DateTime::Parse is DateTime {
 
             |$<time>.made
           );
+        }
+
+        method nginx-date($/) {
+            make DateTime.new(|$<date>.made, |$<time>.made);
         }
 
         method !genericDate($/) {
@@ -259,6 +286,20 @@ class DateTime::Parse is DateTime {
             }
             my %res = hour => ~$p<hour>, minute => ~$p<minute>, second => ~$p<second>, timezone => -$offset;
             make %res;
+        }
+
+        method time3($/) {
+            my Int $offset = 0;
+
+            $offset += +$<time-numoffset><hour> × 60;
+            $offset += +$<time-numoffset><minute>;
+
+            make {
+                hour     => +$<time><hour>,
+                minute   => +$<time><minute>,
+                second   => +$<time><second>,
+                timezone => $offset,
+            };
         }
 
         my %wkday = Mon => 0, Tue => 1, Wed => 2, Thu => 3, Fri => 4, Sat => 5, Sun => 6;
