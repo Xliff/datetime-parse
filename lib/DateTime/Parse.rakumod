@@ -20,7 +20,7 @@ class DateTime::Parse is DateTime {
         }
 
         token nginx-date {
-            <date=.date6> ':' <time=.time3>
+            <date=.dateSlashes> ':' <time=.time3>
         }
 
         token time2 {
@@ -107,13 +107,13 @@ class DateTime::Parse is DateTime {
             <year=.D4-year>  '-' <month=.D2> '-' <day=.D2>
         }
 
-        token date6 {
+        token date6Slashes {
             <day=.D2> '/' <month> '/' <year=.D4-year>
         }
 
         token curl-dt {
             <month> <.SP> <day=.D2> <.SP> <time> <.SP> <year=.D4-year> <.SP>
-            <gmtUtc>
+            <gmt-or-numeric-tz>
         }
 
         token time {
@@ -189,12 +189,7 @@ class DateTime::Parse is DateTime {
         }
 
         method rfc850-var-date-two($/) {
-            make DateTime.ne  token date5 {
-            <year=.D4-year>  '-' <month=.D2> '-' <day=.D2>
-        }
-
-        token date6 {
-            <day=.D2> '/' <month> '/' <year=.D4-year>w(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
+            make DateTime.new(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
         }
 
         method asctime-date($/) {
