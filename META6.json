@@ -9,7 +9,7 @@
     ],
     "depends" : [ ],
     "provides" : {
-        "DateTime::Parse" : "lib/DateTime/Parse.pm6"
+        "DateTime::Parse" : "lib/DateTime/Parse.rakumod"
     },
     "source-url"    : "git://github.com/sergot/datetime-parse.git"
 }
