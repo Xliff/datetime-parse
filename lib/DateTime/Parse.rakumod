@@ -5,10 +5,12 @@ my class X::DateTime::CannotParse is Exception {
 
 class DateTime::Parse is DateTime {
     grammar Grammar {
-        token TOP {
-            <dt=rfc3339-date>    | <dt=rfc1123-date>        | <dt=rfc850-date>  |
-            <dt=rfc850-var-date> | <dt=rfc850-var-date-two> | <dt=asctime-date> |
-            <dt=nginx-date>      | <dt=curl-dt>
+        regex TOP {
+            $<dt>=[
+              <mysql-date>      | <rfc3339-date>    | <rfc1123-date>        |
+              <rfc850-date>     | <rfc850-var-date> | <rfc850-var-date-two> |
+              <asctime-date>    | <nginx-date>      | <curl-dt>
+            ]
         }
 
         token rfc3339-date {
@@ -115,8 +117,13 @@ class DateTime::Parse is DateTime {
             <month> <.ws>
             <day> <.ws>
             <time> <.ws>
-            <year=.D4-year> <.ws>
+            <year=.D4-year>
+            <.ws>
             <gmt-or-numeric-tz>
+        }
+
+        token mysql-date {
+          <date5> <.ws> <time=partial-time>
         }
 
         token time {
@@ -164,8 +171,15 @@ class DateTime::Parse is DateTime {
         has $!timezone is built;
 
         method TOP($/) {
-            make $<dt>.made
+            for <
+                mysql-date   rfc3339-date    rfc1123-date
+                rfc850-date  rfc850-var-date rfc850-var-date-two
+                asctime-date nginx-date      curl-dt
+            > {
+                return make $/{$_}.made if $/{$_};
+            }
         }
+
 
         method rfc3339-date($/) {
             make
@@ -220,6 +234,17 @@ class DateTime::Parse is DateTime {
 
         method nginx-date($/) {
             make DateTime.new(|$<date>.made, |$<time>.made);
+        }
+
+        method mysql-date($/) {
+            make DateTime.new(
+              year   => $<date5><year>.made,
+              month  => $<date5><month>.made,
+              day    => $<date5><day>.made,
+              hour   => $<time><hour>.made,
+              minute => $<time><minute>.made,
+              second => $<time><second>.made
+            );
         }
 
         method !genericDate($/) {
