@@ -7,9 +7,9 @@ class DateTime::Parse is DateTime {
     grammar Grammar {
         regex TOP {
             $<dt>=[
-              <mysql-date>      | <rfc3339-date>    | <rfc1123-date>        |
-              <rfc850-date>     | <rfc850-var-date> | <rfc850-var-date-two> |
-              <asctime-date>    | <nginx-date>      | <curl-dt>
+              <mysql-date>      | <rfc3339-date>    | <rfc1123-date>  |
+              <rfc850-date>     | <asctime-date>    | <nginx-date>    |
+              <curl-dt>         | <date6>
             ]
         }
 
@@ -18,7 +18,7 @@ class DateTime::Parse is DateTime {
         }
 
         token date6 {
-          <year=.D4-year> <month=.D2> <day=.D2>
+            <year=.D4-year> <month=.D2> <day=.D2>
         }
 
         token nginx-date {
@@ -26,7 +26,7 @@ class DateTime::Parse is DateTime {
         }
 
         token time2 {
-            <part=.partial-time> <offset=.time-offset>
+            <part=.partial-time> <offset=.time-offset>?
         }
 
         token time3 {
@@ -66,15 +66,15 @@ class DateTime::Parse is DateTime {
         }
 
         token rfc850-date {
-            <.weekday> ',' <.SP> <date=.date2> <.SP> <time> <.SP> <gmt-or-numeric-tz>
-        }
-
-        token rfc850-var-date {
-            <.wkday> ','? <.SP> <date=.date4> <.SP> <time> <.SP> <gmt-or-numeric-tz>
-        }
-
-        token rfc850-var-date-two {
-            <.wkday> ','? <.SP> <date=.date2> <.SP> <time> <.SP> <gmt-or-numeric-tz>
+            [
+              <.weekday> ',' |
+              <.wkday>
+            ]  <.SP>
+            [
+              <date=.date2> |
+              <date=.date4>
+            ] <.SP>
+            <time> <.SP> <gmt-or-numeric-tz>
         }
 
         token asctime-date {
@@ -195,9 +195,9 @@ class DateTime::Parse is DateTime {
             make DateTime.new(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
         }
 
-        method rfc850-var-date($/) {
-            make DateTime.new(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
-        }
+        # method rfc850-var-date($/) {
+        #     make DateTime.new(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
+        # }
 
         method gmt-or-numeric-tz($/) {
             $/.make: %( timezone =>
@@ -205,9 +205,9 @@ class DateTime::Parse is DateTime {
                 );
         }
 
-        method rfc850-var-date-two($/) {
-            make DateTime.new(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
-        }
+        # method rfc850-var-date-two($/) {
+        #     make DateTime.new(|$<date>.made, |$<time>.made, |$<gmt-or-numeric-tz>.made)
+        # }
 
         method asctime-date($/) {
             my $date = $<date>.made;
@@ -281,7 +281,9 @@ class DateTime::Parse is DateTime {
         ;
 
         method asctime-tz($/) {
-            my $offset = (%timezones{$<asctime-tzname>.made} // 0) + ($<time-houroffset>.made // 0);
+            my $offset =
+              (%timezones{$<asctime-tzname>.made} // 0) +
+              ($<time-houroffset>.made            // 0);
 
             make { offset-hours => $offset }
       }
@@ -295,19 +297,30 @@ class DateTime::Parse is DateTime {
         }
 
         method time($/) {
-            make { hour => +$<hour>, minute => +$<minute>, second => +$<second> }
+            make {
+              hour   => +$<hour>,
+              minute => +$<minute>,
+              second => +$<second>
+            }
         }
 
         method time2($/) {
             my $p = $<part>;
             my $offset = 0;
-            unless $<offset> eq 'Z'|'z' {
-                if ~$<offset><offset><sign> eq '-' {
-                    $offset = 3600 * ~$<offset><offset><hour>.Int;
-                    $offset += 60 * ~$<offset><offset><minute>.Int;
-                }
+            with $<offset> {
+              unless $_ eq 'Z'|'z' {
+                  if ~.<offset><sign> eq '-' {
+                      $offset = 3600 * ~.<offset><hour>.Int;
+                      $offset += 60 * ~.<offset><minute>.Int;
+                  }
+              }
             }
-            my %res = hour => ~$p<hour>, minute => ~$p<minute>, second => ~$p<second>, timezone => -$offset;
+            my %res =
+              hour     => ~$p<hour>,
+              minute   => ~$p<minute>,
+              second   => ~$p<second>,
+              timezone => -$offset;
+
             make %res;
         }
 
@@ -362,16 +375,18 @@ class DateTime::Parse is DateTime {
     }
 
     method new(Str $format, :$timezone is copy, :$rule = 'TOP') {
-        DateTime::Parse::Grammar.parse(
-           $format,
-          :$rule,
-          actions   => $timezone ?? DateTime::Parse::Actions.new(:$timezone)
-                                 !! DateTime::Parse::Actions.new
-        )
-            or
-        X::DateTime::CannotParse.new( invalid-str => $format ).throw;
+      my $p = DateTime::Parse::Grammar.parse(
+         $format,
+        :$rule,
+        actions   => $timezone ?? DateTime::Parse::Actions.new(:$timezone)
+                               !! DateTime::Parse::Actions.new
+      );
 
-        $/.made
+      return $p.made if $rule ne 'TOP';
+
+      $p or X::DateTime::CannotParse.new( invalid-str => $format ).throw;
+
+      $/.made
     }
 }
 
