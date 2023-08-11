@@ -9,7 +9,8 @@ class DateTime::Parse is DateTime {
             $<dt>=[
               <mysql-date>      | <rfc3339-date>    | <rfc1123-date>  |
               <rfc850-date>     | <asctime-date>    | <nginx-date>    |
-              <curl-dt>         | <date6>
+              <curl-dt>         | <date6>           | <us-date>       |
+              <intl-date>       | <kern-log>
             ]
         }
 
@@ -78,7 +79,20 @@ class DateTime::Parse is DateTime {
         }
 
         token asctime-date {
-            <.wkday> <.SP> <date=.date3> <.SP> <time> <.SP> <year=.D4-year> <asctime-tz>?
+          <asctime-date-year> | <asctime-date-zone>
+        }
+        token asctime-date-year {
+            <.wkday>        <.SP>
+            <date=.date3>   <.SP>
+            <time>          <.SP>
+            <year=.D4-year>       <asctime-t1z>?
+        }
+        token asctime-date-zone {
+          <.wkday>      <.SP>
+          <date=.date3> <.SP>
+          <time>        <.SP>
+          <gmt-or-numeric-tz> <.SP>
+          <year=.D4-year>
         }
 
         token asctime-tz {
@@ -109,21 +123,35 @@ class DateTime::Parse is DateTime {
             <year=.D4-year>  '-' <month=.D2> '-' <day=.D2>
         }
 
+        token us-date {
+             <month=.D2> '/' <day=.D2> '/' <year=.D4-year>
+        }
+
+        token intl-date {
+             <year=.D4-year> '/' <month=.D2> '/' <day=.D2>
+        }
+
         token date6Slashes {
             <day=.D2> '/' <month> '/' <year=.D4-year>
         }
 
         token curl-dt {
-            <month> <.ws>
-            <day> <.ws>
-            <time> <.ws>
-            <year=.D4-year>
-            <.ws>
+            <month>             <.ws>
+            <day>               <.ws>
+            <time>              <.ws>
+            <year=.D4-year>     <.ws>
             <gmt-or-numeric-tz>
         }
 
         token mysql-date {
           <date5> <.ws> <time=partial-time>
+        }
+
+        token kern-log {
+          <month>                <.ws>
+          <day>                  <.ws>
+          [',' <year=.D4-year>]? <.ws>
+          <time>
         }
 
         token time {
@@ -175,6 +203,8 @@ class DateTime::Parse is DateTime {
                 mysql-date   rfc3339-date    rfc1123-date
                 rfc850-date  rfc850-var-date rfc850-var-date-two
                 asctime-date nginx-date      curl-dt
+                us-date      intl-date       date6
+                kern-log
             > {
                 return make $/{$_}.made if $/{$_};
             }
@@ -210,16 +240,44 @@ class DateTime::Parse is DateTime {
         # }
 
         method asctime-date($/) {
+          my $z = $<asctime-date-zone>.made;
+          my $y = $<asctime-date-year>.made;
+
+          make do {
+            when $z.defined { $z }
+            when $y.defined { $y }
+
+            default { Nil }
+          }
+        }
+
+        method asctime-date-year ($/) {
             my $date = $<date>.made;
             $date<year> = $<year>.made;
 
             my $tz = ($<asctime-tz>.made<offset-hours> // 0) × 3600;
 
             make DateTime.new(
-              |$<date>.made,
+              |$date,
               |$<time>.made,
               :timezone($!timezone // $tz)
             )
+        }
+
+        method asctime-date-zone ($/) {
+            my $date    = $<date>.made;
+            $date<year> = $<year>.made;
+
+            my $time    = $<time>.made;
+            my $tz      = $<gmt-or-numeric-tz>.made<timezone>;
+
+            my $dt = DateTime.new(
+              |$date,
+              |$time,
+              :timezone($tz)
+            );
+
+            make $dt;
         }
 
         method curl-dt ($/) {
@@ -247,6 +305,17 @@ class DateTime::Parse is DateTime {
             );
         }
 
+        method kern-log ($/) {
+          make DateTime.new(
+            year   => $<year>.made // DateTime.now.year,
+            month  => $<month>.made,
+            day    => $<day>.made,
+            hour   => $<time><hour>.made,
+            minute => $<time><minute>.made,
+            second => $<time><second>.made
+          );
+        }
+
         method !genericDate($/) {
             make { year => $<year>.made, month => $<month>.made, day => $<day>.made }
         }
@@ -272,7 +341,19 @@ class DateTime::Parse is DateTime {
         }
 
         method date6 ($/) { # e.g. 19961219
-          self!genericDate($/);
+          make DateTime.new( |self!genericDate($/) );
+        }
+
+        method date6Slashes ($/) { # e.g. 02/Feb/2000
+            make DateTime.new( |self!genericDate($/) );
+        }
+
+        method us-date ($/) { # e.g. 02/28/2000
+          make DateTime.new( |self!genericDate($/) );
+        }
+
+        method intl-date ($/) { # e.g. 2000/02/28
+          make DateTime.new( |self!genericDate($/) );
         }
 
         my %timezones =
