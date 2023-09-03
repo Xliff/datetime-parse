@@ -367,7 +367,7 @@ class DateTime::Parse is DateTime {
               ($<time-houroffset>.made            // 0);
 
             make { offset-hours => $offset }
-      }
+        }
 
         method asctime-tzname($/) {
             make ~$/
@@ -455,7 +455,7 @@ class DateTime::Parse is DateTime {
         }
     }
 
-    method new(Str $format, :$timezone is copy, :$rule = 'TOP') {
+    method new (Str $format, :$timezone is copy, :$rule = 'TOP') {
       my $p = DateTime::Parse::Grammar.parse(
          $format,
         :$rule,
@@ -487,8 +487,6 @@ DateTime::Parse - DateTime parser
 
 =head2 Available formats:
 
-=item rfc1123
-=item rfc850
 =item asctime
 
 =head1 METHODS
