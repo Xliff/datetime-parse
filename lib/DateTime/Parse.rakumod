@@ -10,7 +10,7 @@ class DateTime::Parse is DateTime {
               <mysql-date>      | <rfc3339-date>    | <rfc1123-date>  |
               <rfc850-date>     | <asctime-date>    | <nginx-date>    |
               <curl-dt>         | <date6>           | <us-date>       |
-              <intl-date>       | <kern-log>
+              <intl-date>       | <kern-log>        | <yyyy-mm-dd>
             ]
         }
 
@@ -20,6 +20,10 @@ class DateTime::Parse is DateTime {
 
         token date6 {
             <year=.D4-year> <month=.D2> <day=.D2>
+        }
+
+        token yyyy-mm-dd {
+          <year=.D4-year> '-' <month=.D2> '-' <day=.D2>
         }
 
         token nginx-date {
@@ -341,6 +345,10 @@ class DateTime::Parse is DateTime {
         }
 
         method date6 ($/) { # e.g. 19961219
+          make DateTime.new( |self!genericDate($/) );
+        }
+
+        method yyyy-mm-dd ($/) {
           make DateTime.new( |self!genericDate($/) );
         }
 
