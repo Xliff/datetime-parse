@@ -6,13 +6,16 @@ my class X::DateTime::CannotParse is Exception {
 class DateTime::Parse is DateTime {
     grammar Grammar {
         regex TOP {
-            $<dt>=[
-              <mysql-date>      | <rfc3339-date>    | <rfc1123-date>  |
-              <rfc850-date>     | <asctime-date>    | <nginx-date>    |
-              <curl-dt>         | <date6>           | <us-date>       |
-              <intl-date>       | <kern-log>        | <yyyy-mm-dd>
-            ]
+          <dt>
         }
+
+        regex dt {
+          <mysql-date>      | <rfc3339-date>    | <rfc1123-date>  |
+          <rfc850-date>     | <asctime-date>    | <nginx-date>    |
+          <curl-dt>         | <date6>           | <us-date>       |
+          <intl-date>       | <kern-log>        | <yyyy-mm-dd>
+        }
+
 
         token rfc3339-date {
             <date=.date5> [ <[Tt \x0020]> <time=.time2> ]?
@@ -203,22 +206,24 @@ class DateTime::Parse is DateTime {
         has $!timezone is built;
 
         method TOP($/) {
-            for <
-                mysql-date   rfc3339-date    rfc1123-date
-                rfc850-date  rfc850-var-date rfc850-var-date-two
-                asctime-date nginx-date      curl-dt
-                us-date      intl-date       date6
-                kern-log
-            > {
-                return make $/{$_}.made if $/{$_};
-            }
+          make $/<dt>.made;
         }
 
+        method dt ($/) {
+          for <
+              mysql-date   rfc3339-date    rfc1123-date
+              rfc850-date  rfc850-var-date rfc850-var-date-two
+              asctime-date nginx-date      curl-dt
+              us-date      intl-date       date6
+              kern-log
+          > {
+              return make $/{$_}.made if $/{$_};
+          }
+        }
 
         method rfc3339-date($/) {
-            make
-              $<time> ?? DateTime.new(|$<date>.made, |$<time>.made)
-                      !! DateTime.new(|$<date>.made)
+            make $<time> ?? DateTime.new(|$<date>.made, |$<time>.made)
+                         !! DateTime.new(|$<date>.made);
         }
 
         method rfc1123-date($/) {
